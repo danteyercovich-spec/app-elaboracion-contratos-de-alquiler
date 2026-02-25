@@ -1,0 +1,362 @@
+<!DOCTYPE html>
+<html lang="es">
+
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>AutoContract — Gestor Legal Conversacional</title>
+  <meta name="description"
+    content="Automatiza la creación de contratos de alquiler con inteligencia artificial. Mantén la integridad legal de tus modelos mientras completas datos variable por variable." />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link
+    href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Playfair+Display:wght@600;700&display=swap"
+    rel="stylesheet" />
+  <link rel="stylesheet" href="/static/styles.css" />
+</head>
+
+<body>
+  <!-- ════════════════════ SPLASH SCREEN ════════════════════ -->
+  <div id="splash" class="splash">
+    <div class="splash-content">
+      <div class="splash-logo">
+        <svg width="52" height="52" viewBox="0 0 52 52" fill="none">
+          <rect width="52" height="52" rx="14" fill="url(#splashGrad)" />
+          <path d="M14 16h24M14 22h18M14 28h20M14 34h14" stroke="white" stroke-width="2.5" stroke-linecap="round" />
+          <circle cx="38" cy="32" r="7" fill="white" fill-opacity="0.25" stroke="white" stroke-width="2" />
+          <path d="M35 32l2 2 4-4" stroke="white" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" />
+          <defs>
+            <linearGradient id="splashGrad" x1="0" y1="0" x2="52" y2="52" gradientUnits="userSpaceOnUse">
+              <stop stop-color="#6366f1" />
+              <stop offset="1" stop-color="#8b5cf6" />
+            </linearGradient>
+          </defs>
+        </svg>
+      </div>
+      <h1 class="splash-title">AutoContract</h1>
+      <p class="splash-sub">Gestor Legal Conversacional</p>
+      <div class="splash-loader">
+        <div class="splash-bar"></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ════════════════════ APP ════════════════════ -->
+  <div id="app" class="app hidden">
+
+    <!-- ── HEADER ── -->
+    <header class="header">
+      <div class="header-brand">
+        <div class="header-logo">
+          <svg width="32" height="32" viewBox="0 0 52 52" fill="none">
+            <rect width="52" height="52" rx="14" fill="url(#logoGrad)" />
+            <path d="M14 16h24M14 22h18M14 28h20M14 34h14" stroke="white" stroke-width="2.5" stroke-linecap="round" />
+            <circle cx="38" cy="32" r="7" fill="white" fill-opacity="0.25" stroke="white" stroke-width="2" />
+            <path d="M35 32l2 2 4-4" stroke="white" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" />
+            <defs>
+              <linearGradient id="logoGrad" x1="0" y1="0" x2="52" y2="52" gradientUnits="userSpaceOnUse">
+                <stop stop-color="#6366f1" />
+                <stop offset="1" stop-color="#8b5cf6" />
+              </linearGradient>
+            </defs>
+          </svg>
+        </div>
+        <div>
+          <span class="header-title">AutoContract</span>
+          <span class="header-badge">Legal AI</span>
+        </div>
+      </div>
+      <nav class="header-steps">
+        <div class="step-item active" id="step-nav-1" data-step="1">
+          <span class="step-num">1</span>
+          <span class="step-label">Plantilla</span>
+        </div>
+        <div class="step-divider"></div>
+        <div class="step-item" id="step-nav-2" data-step="2">
+          <span class="step-num">2</span>
+          <span class="step-label">Análisis</span>
+        </div>
+        <div class="step-divider"></div>
+        <div class="step-item" id="step-nav-3" data-step="3">
+          <span class="step-num">3</span>
+          <span class="step-label">Entrevista</span>
+        </div>
+        <div class="step-divider"></div>
+        <div class="step-item" id="step-nav-4" data-step="4">
+          <span class="step-num">4</span>
+          <span class="step-label">Contrato</span>
+        </div>
+      </nav>
+      <div class="header-actions">
+        <div id="api-status" class="api-status">
+          <span class="status-dot"></span>
+          <span id="api-status-text">Conectando...</span>
+        </div>
+        <button id="btn-reset" class="btn-icon" title="Reiniciar">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+            stroke-linecap="round" stroke-linejoin="round">
+            <path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8" />
+            <path d="M3 3v5h5" />
+          </svg>
+        </button>
+      </div>
+    </header>
+
+    <!-- ── MAIN LAYOUT ── -->
+    <main class="main-layout">
+
+      <!-- ══ PANEL IZQUIERDO: CHAT ══ -->
+      <section class="chat-panel">
+
+        <!-- STEP 1: Ingresar plantilla -->
+        <div id="step-1" class="step-section active">
+          <div class="step-header">
+            <div class="step-icon">📄</div>
+            <div>
+              <h2 class="step-title">Ingrese su Plantilla de Contrato</h2>
+              <p class="step-desc">Pegue el texto de su modelo de contrato o suba un archivo .txt</p>
+            </div>
+          </div>
+
+          <div class="upload-zone" id="upload-zone">
+            <div class="upload-icon">📁</div>
+            <p class="upload-text">Arrastre un archivo <strong>.txt</strong> aquí</p>
+            <p class="upload-sub">o haga clic para seleccionar</p>
+            <input type="file" id="file-input" accept=".txt" class="hidden" />
+          </div>
+
+          <div class="divider-text"><span>o ingrese manualmente</span></div>
+
+          <div class="textarea-wrapper">
+            <label class="field-label">Texto del contrato modelo</label>
+            <textarea id="contract-input" class="contract-textarea"
+              placeholder="Pegue aquí el texto completo de su contrato. El sistema detectará automáticamente todos los campos variables como {{NOMBRE}}, {{FECHA}}, {{MONTO}}, etc."
+              rows="12" oninput="checkAnalyzeBtn()" onpaste="setTimeout(checkAnalyzeBtn, 50)"
+              onkeyup="checkAnalyzeBtn()"></textarea>
+            <div class="char-count"><span id="char-count">0</span> caracteres</div>
+          </div>
+
+          <button id="btn-analyze" class="btn-primary btn-full" disabled>
+            <span class="btn-icon-left">🔍</span>
+            Analizar Contrato con IA
+            <span class="btn-arrow">→</span>
+          </button>
+        </div>
+
+        <!-- STEP 2: Confirmar variables -->
+        <div id="step-2" class="step-section hidden">
+          <div class="step-header">
+            <div class="step-icon">✅</div>
+            <div>
+              <h2 class="step-title">Variables Detectadas</h2>
+              <p class="step-desc">Revise los campos identificados por la IA antes de continuar</p>
+            </div>
+          </div>
+
+          <div id="analysis-notes" class="analysis-note hidden"></div>
+
+          <div id="variables-list" class="variables-list">
+            <!-- Se llena dinámicamente -->
+          </div>
+
+          <div class="step-actions">
+            <button id="btn-back-1" class="btn-secondary">← Volver</button>
+            <button id="btn-confirm-vars" class="btn-primary">
+              Confirmar y Continuar
+              <span class="btn-arrow">→</span>
+            </button>
+          </div>
+        </div>
+
+        <!-- STEP 3: Entrevista conversacional -->
+        <div id="step-3" class="step-section hidden">
+          <div class="step-header">
+            <div class="step-icon">💬</div>
+            <div>
+              <h2 class="step-title">Entrevista Conversacional</h2>
+              <p class="step-desc">El asistente le guiará para completar todos los datos</p>
+            </div>
+          </div>
+
+          <div id="chat-messages" class="chat-messages">
+            <!-- Mensajes del chat -->
+          </div>
+
+          <div class="chat-input-area">
+            <div class="chat-input-wrapper">
+              <input type="text" id="chat-input" class="chat-input" placeholder="Escriba su respuesta aquí..."
+                disabled />
+              <button id="btn-send" class="btn-send" disabled>
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"
+                  stroke-linecap="round" stroke-linejoin="round">
+                  <line x1="22" y1="2" x2="11" y2="13" />
+                  <polygon points="22 2 15 22 11 13 2 9 22 2" />
+                </svg>
+              </button>
+            </div>
+          </div>
+        </div>
+
+        <!-- STEP 4: Vista previa y exportación -->
+        <div id="step-4" class="step-section hidden">
+          <div class="step-header">
+            <div class="step-icon">🎉</div>
+            <div>
+              <h2 class="step-title">Contrato Completado</h2>
+              <p class="step-desc">Revise el documento y descárguelo en formato profesional</p>
+            </div>
+          </div>
+
+          <div class="export-actions">
+            <button id="btn-download-docx" class="btn-export btn-docx">
+              <span class="btn-export-icon">📄</span>
+              <div>
+                <div class="btn-export-title">Descargar .DOCX</div>
+                <div class="btn-export-sub">Microsoft Word (recomendado)</div>
+              </div>
+            </button>
+            <button id="btn-copy-text" class="btn-export btn-copy">
+              <span class="btn-export-icon">📋</span>
+              <div>
+                <div class="btn-export-title">Copiar texto</div>
+                <div class="btn-export-sub">Al portapapeles</div>
+              </div>
+            </button>
+          </div>
+
+          <div class="preview-label">Vista previa del contrato:</div>
+          <div id="contract-preview" class="contract-preview">
+            <!-- Texto del contrato generado -->
+          </div>
+
+          <button id="btn-new-contract" class="btn-secondary btn-full" style="margin-top:1rem">
+            ＋ Nuevo contrato con la misma plantilla
+          </button>
+        </div>
+
+      </section>
+
+      <!-- ══ PANEL DERECHO: ESTADO ══ -->
+      <aside class="status-panel">
+        <div class="status-card">
+          <h3 class="status-card-title">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+              stroke-linecap="round" stroke-linejoin="round">
+              <circle cx="12" cy="12" r="10" />
+              <line x1="12" y1="8" x2="12" y2="12" />
+              <line x1="12" y1="16" x2="12.01" y2="16" />
+            </svg>
+            Estado del documento
+          </h3>
+
+          <div class="progress-ring-container">
+            <svg class="progress-ring" width="100" height="100" viewBox="0 0 100 100">
+              <circle class="progress-ring-bg" cx="50" cy="50" r="40" />
+              <circle class="progress-ring-fill" id="progress-circle" cx="50" cy="50" r="40" />
+            </svg>
+            <div class="progress-text">
+              <span id="progress-pct">0%</span>
+              <span class="progress-sub">completado</span>
+            </div>
+          </div>
+
+          <div class="progress-stats">
+            <div class="stat-item">
+              <span class="stat-label">Variables totales</span>
+              <span id="stat-total" class="stat-value">—</span>
+            </div>
+            <div class="stat-item">
+              <span class="stat-label">Completadas</span>
+              <span id="stat-done" class="stat-value text-success">—</span>
+            </div>
+            <div class="stat-item">
+              <span class="stat-label">Pendientes</span>
+              <span id="stat-pending" class="stat-value text-warn">—</span>
+            </div>
+          </div>
+        </div>
+
+        <!-- Variables completadas -->
+        <div class="status-card" id="completed-vars-card" style="display:none">
+          <h3 class="status-card-title">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+              stroke-linecap="round" stroke-linejoin="round">
+              <polyline points="20 6 9 17 4 12" />
+            </svg>
+            Datos ingresados
+          </h3>
+          <div id="completed-vars-list" class="completed-vars">
+            <!-- Se llena dinámicamente -->
+          </div>
+        </div>
+
+        <!-- Seguridad legal -->
+        <div class="status-card security-card">
+          <h3 class="status-card-title">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+              stroke-linecap="round" stroke-linejoin="round">
+              <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z" />
+            </svg>
+            Seguridad Legal
+          </h3>
+          <ul class="security-list">
+            <li class="security-item ok">
+              <span class="security-icon">✓</span>
+              Texto original preservado
+            </li>
+            <li class="security-item ok">
+              <span class="security-icon">✓</span>
+              Solo sustitución de variables
+            </li>
+            <li class="security-item ok">
+              <span class="security-icon">✓</span>
+              Sin paráfrasis ni alteraciones
+            </li>
+            <li class="security-item ok">
+              <span class="security-icon">✓</span>
+              Integridad clausular garantizada
+            </li>
+          </ul>
+        </div>
+
+        <!-- Ayuda -->
+        <div class="status-card help-card">
+          <h3 class="status-card-title">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+              stroke-linecap="round" stroke-linejoin="round">
+              <circle cx="12" cy="12" r="10" />
+              <path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3" />
+              <line x1="12" y1="17" x2="12.01" y2="17" />
+            </svg>
+            Formatos de variables
+          </h3>
+          <div class="help-list">
+            <code class="help-tag">[NOMBRE]</code>
+            <code class="help-tag">{{dato}}</code>
+            <code class="help-tag">&lt;CAMPO&gt;</code>
+            <code class="help-tag">___________</code>
+          </div>
+          <p class="help-desc">Use cualquiera de estos formatos en su contrato. La IA los detectará automáticamente.</p>
+        </div>
+      </aside>
+    </main>
+  </div>
+
+  <!-- ── TOAST ── -->
+  <div id="toast" class="toast hidden">
+    <span id="toast-icon">✓</span>
+    <span id="toast-msg"></span>
+  </div>
+
+  <!-- ── LOADING OVERLAY ── -->
+  <div id="loading-overlay" class="loading-overlay hidden">
+    <div class="loading-content">
+      <div class="spinner"></div>
+      <p id="loading-text">Procesando...</p>
+    </div>
+  </div>
+
+  <script src="/static/app.js?v=5"></script>
+</body>
+
+</html>
