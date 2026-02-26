@@ -392,47 +392,78 @@ Responde con JSON válido:
 @app.post("/api/generate", response_model=GenerateResponse)
 def generate_contract(request: GenerateRequest):
     """
-    Inyecta los datos en la plantilla. Sustitución inteligente con Regex.
+    Inyecta los datos en la plantilla. Sustitución en 3 capas para máxima confiabilidad.
     """
     contract = request.contract_template
     applied = 0
+    no_match = []
+
+    print(f"\n[GENERATE] Variables recibidas: {len(request.variables)}")
+    print(f"[GENERATE] Datos recolectados : {list(request.collected_data.keys())}")
 
     for variable in request.variables:
-        key = variable["key"]
-        placeholder = variable.get("placeholder_text", "")
-        value = request.collected_data.get(key, "")
+        key         = variable["key"]
+        placeholder = variable.get("placeholder_text", "").strip()
+        value       = str(request.collected_data.get(key, "")).strip()
 
-        if not value or not placeholder:
+        if not value:
+            print(f"[GENERATE] SKIP  '{key}' — sin valor ingresado")
+            continue
+        if not placeholder:
+            print(f"[GENERATE] SKIP  '{key}' — sin placeholder_text")
             continue
 
-        # PRIMER INTENTO: Coincidencia exacta
+        original_contract = contract
+        replaced = False
+
+        # ── CAPA 1: Coincidencia exacta (todas las ocurrencias) ───────────────
         if placeholder in contract:
-            contract = contract.replace(placeholder, str(value))
+            contract = contract.replace(placeholder, value)
+            replaced = True
+
+        # ── CAPA 2: Normalización de espacios (tabs → espacio, múltiples → uno)
+        if not replaced:
+            ph_norm  = re.sub(r'\s+', ' ', placeholder)
+            ctx_norm = re.sub(r'\s+', ' ', contract)
+            if ph_norm in ctx_norm:
+                contract = re.sub(r'\s+', ' ', contract)
+                contract = contract.replace(ph_norm, value)
+                replaced = True
+
+        # ── CAPA 3: Regex flexible (puntos, guiones, espacios variables) ──────
+        if not replaced:
+            try:
+                p_esc  = re.escape(placeholder)
+                # Secuencias de puntos → cualquier cantidad de puntos/guiones/espacios
+                p_flex = re.sub(r'(\\\\.)+', r'[.\\-\\s]+', p_esc)
+                # Guiones bajos flexibles
+                p_flex = re.sub(r'\\_+', r'[_\\s]+', p_flex)
+                # Espacios flexibles
+                p_flex = re.sub(r'\\ ', r'\\s*', p_flex)
+
+                if re.search(p_flex, contract):
+                    contract = re.sub(p_flex, value, contract)   # reemplaza TODAS
+                    replaced = True
+            except re.error as e:
+                print(f"[GENERATE] REGEX ERR '{key}': {e}")
+
+        # ── Resultado por variable ────────────────────────────────────────────
+        if replaced:
             applied += 1
-            continue
+            print(f"[GENERATE] OK    '{key}' → '{value[:30]}{'...' if len(value)>30 else ''}'")
+        else:
+            no_match.append(key)
+            print(f"[GENERATE] MISS  '{key}' — placeholder no encontrado: '{placeholder[:60]}'")
 
-        # SEGUNDO INTENTO: Regex para manejar variaciones en puntos/guiones/espacios
-        # Escapamos caracteres especiales de regex
-        p_esc = re.escape(placeholder)
-        
-        # Flexibilizamos puntos, guiones y espacios
-        # Cambiamos secuencias de 3+ puntos por un marcador flexible
-        p_flex = re.sub(r'\\\.', r'\\.+', p_esc)
-        p_flex = re.sub(r'_', r'_+', p_flex)
-        p_flex = re.sub(r'\\ ', r'\\s*', p_flex)
-
-        try:
-            # Buscamos la primera coincidencia y reemplazamos
-            if re.search(p_flex, contract):
-                contract = re.sub(p_flex, str(value), contract, count=1)
-                applied += 1
-        except re.error:
-            continue
+    print(f"\n[GENERATE] Resultado: {applied}/{len(request.variables)} variables aplicadas")
+    if no_match:
+        print(f"[GENERATE] Sin match: {no_match}")
 
     return GenerateResponse(
         contract_preview=contract,
         variables_applied=applied
     )
+
 
 
 @app.post("/api/export-docx")
