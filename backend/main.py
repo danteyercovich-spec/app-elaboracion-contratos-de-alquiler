@@ -8,7 +8,9 @@ import os
 import re
 import json
 import io
+import traceback
 from typing import Any
+from pathlib import Path
 from fastapi import FastAPI, HTTPException
 from fastapi.staticfiles import StaticFiles
 from fastapi.responses import FileResponse, StreamingResponse
@@ -19,29 +21,68 @@ from docx.shared import Pt, Inches
 from docx.enum.text import WD_ALIGN_PARAGRAPH
 from dotenv import load_dotenv
 
-load_dotenv()
+# Imports opcionales de proveedores
+try:
+    import anthropic
+except ImportError:
+    anthropic = None
 
-# ─── Configuración de proveedor ──────────────────────────────────────────────
+try:
+    from openai import OpenAI
+except ImportError:
+    OpenAI = None
+
+# Cargar .env con ruta absoluta basada en la ubicación de este archivo (backend/)
+BASE_DIR = Path(__file__).resolve().parent
+ENV_PATH = BASE_DIR / ".env"
+load_dotenv(dotenv_path=ENV_PATH, override=True)
+
+
+# ─── Configuración unificada de proveedores ───────────────────────────────────
 AI_PROVIDER = os.getenv("AI_PROVIDER", "openai").lower().strip()
 
-if AI_PROVIDER == "claude":
-    try:
-        import anthropic
-        claude_client = anthropic.Anthropic(api_key=os.getenv("CLAUDE_API_KEY"))
-        CLAUDE_MODEL = os.getenv("CLAUDE_MODEL", "claude-sonnet-4-5")
+# Variables de key compartidas para logs
+USED_KEY_NAME = "NONE"
+CLEAN_API_KEY = None
+claude_client = None
+openai_client = None
+CLAUDE_MODEL = "claude-3-5-sonnet-20240620"
+OPENAI_MODEL = "gpt-4o-mini"
+
+def inicializar_clientes():
+    global claude_client, openai_client, USED_KEY_NAME, CLEAN_API_KEY, CLAUDE_MODEL, OPENAI_MODEL
+    
+    if AI_PROVIDER == "claude":
+        if not anthropic:
+            raise RuntimeError("Instale anthropic: pip install anthropic")
+        
+        USED_KEY_NAME = "ANTHROPIC_API_KEY"
+        api_key = os.getenv("ANTHROPIC_API_KEY")
+        if not api_key:
+            USED_KEY_NAME = "CLAUDE_API_KEY"
+            api_key = os.getenv("CLAUDE_API_KEY")
+        
+        CLEAN_API_KEY = api_key.strip() if api_key else None
+        CLAUDE_MODEL = os.getenv("CLAUDE_MODEL", "claude-3-5-sonnet-20240620").strip()
+        
+        claude_client = anthropic.Anthropic(api_key=CLEAN_API_KEY)
         openai_client = None
-        print(f"[OK] Usando Claude ({CLAUDE_MODEL})")
-    except ImportError:
-        raise RuntimeError("Instale anthropic: pip install anthropic")
-else:
-    try:
-        from openai import OpenAI
-        openai_client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
-        OPENAI_MODEL = os.getenv("OPENAI_MODEL", "gpt-4o-mini")
+        print(f"[OK] Cliente Claude inicializado ({CLAUDE_MODEL})")
+    else:
+        if not OpenAI:
+            raise RuntimeError("Instale openai: pip install openai")
+            
+        openai_key = os.getenv("OPENAI_API_KEY")
+        CLEAN_API_KEY = openai_key.strip() if openai_key else None
+        USED_KEY_NAME = "OPENAI_API_KEY"
+        
+        openai_client = OpenAI(api_key=CLEAN_API_KEY)
+        OPENAI_MODEL = os.getenv("OPENAI_MODEL", "gpt-4o-mini").strip()
         claude_client = None
-        print(f"[OK] Usando OpenAI ({OPENAI_MODEL})")
-    except ImportError:
-        raise RuntimeError("Instale openai: pip install openai")
+        print(f"[OK] Cliente OpenAI inicializado ({OPENAI_MODEL})")
+
+# Inicialización al arranque
+inicializar_clientes()
 
 
 # ─── Función unificada de llamada a IA ───────────────────────────────────────
@@ -65,14 +106,33 @@ def llamar_ia(system_prompt: str, user_message: str,
         if json_mode:
             system_prompt += "\n\nIMPORTANTE: Responde ÚNICAMENTE con JSON válido, sin texto adicional."
 
-        response = claude_client.messages.create(
-            model=CLAUDE_MODEL,
-            max_tokens=8192,
-            system=system_prompt,
-            messages=msgs,
-            temperature=temperature
-        )
-        return response.content[0].text
+        if not claude_client:
+             raise HTTPException(status_code=500, detail="El cliente de Claude no ha sido inicializado. Verifique su API Key.")
+
+        try:
+            response = claude_client.messages.create(
+                model=CLAUDE_MODEL,
+                max_tokens=8192,
+                system=system_prompt,
+                messages=msgs,
+                temperature=temperature
+            )
+            return response.content[0].text
+        except Exception as e:
+            # Manejo dinámico de excepciones de Anthropic sin depender del import estático
+            err_type = type(e).__name__
+            if err_type == 'NotFoundError':
+                raise HTTPException(
+                    status_code=404, 
+                    detail=f"Modelo '{CLAUDE_MODEL}' no encontrado o no habilitado para esta API Key. "
+                           "Verifique CLAUDE_MODEL en su .env."
+                )
+            elif err_type == 'AuthenticationError':
+                raise HTTPException(
+                    status_code=401,
+                    detail="Error de autenticación con Anthropic. Verifique su API Key en el archivo .env."
+                )
+            raise HTTPException(status_code=500, detail=f"Error en llamada a Claude: {str(e)}")
 
     else:
         # ── OpenAI ──
@@ -185,10 +245,19 @@ async def info():
 
 
 @app.post("/api/analyze", response_model=AnalyzeResponse)
-async def analyze_contract(request: AnalyzeRequest):
+def analyze_contract(request: AnalyzeRequest):
     """
     Analiza el texto del contrato y detecta variables a completar.
     """
+    # Logs seguros de diagnóstico en cada llamada
+    masked_key = f"{CLEAN_API_KEY[:6]}...{CLEAN_API_KEY[-4:]}" if CLEAN_API_KEY and len(CLEAN_API_KEY) > 10 else "N/A"
+    print(f"\n[DIAGNOSTIC] Llamada a /api/analyze")
+    print(f" - Ruta .env: {ENV_PATH}")
+    print(f" - Proveedor: {AI_PROVIDER}")
+    print(f" - Variable: {USED_KEY_NAME}")
+    print(f" - Key (mask): {masked_key}")
+    print(f" - Modelo: {CLAUDE_MODEL if AI_PROVIDER == 'claude' else OPENAI_MODEL}")
+
     if not request.contract_text or len(request.contract_text.strip()) < 50:
         raise HTTPException(status_code=400, detail="El texto del contrato es demasiado corto.")
 
@@ -237,12 +306,27 @@ Responde ÚNICAMENTE con este formato JSON:
             analysis_notes=result.get("analysis_notes", "Análisis completado.")
         )
 
+    except HTTPException as e:
+        # Re-lanzar HTTPExceptions (como el 401/404 que ya manejamos en llamar_ia)
+        raise e
     except Exception as e:
+        print("\n[!!!] ERROR CRÍTICO EN /api/analyze")
+        print(f"Tipo de error: {type(e).__name__}")
+        
+        # Si el error tiene atributos de respuesta (como los de Anthropic/httpx)
+        if hasattr(e, 'status_code'):
+            print(f"Código HTTP real: {e.status_code}")
+        if hasattr(e, 'message'):
+            print(f"Mensaje exacto: {e.message}")
+        
+        # Imprimir traceback completo para diagnóstico
+        traceback.print_exc()
+        
         raise HTTPException(status_code=500, detail=f"Error en el análisis: {str(e)}")
 
 
 @app.post("/api/chat", response_model=ChatResponse)
-async def chat(request: ChatRequest):
+def chat(request: ChatRequest):
     """
     Conversación guiada para recopilar datos de las variables.
     """
@@ -306,7 +390,7 @@ Responde con JSON válido:
 
 
 @app.post("/api/generate", response_model=GenerateResponse)
-async def generate_contract(request: GenerateRequest):
+def generate_contract(request: GenerateRequest):
     """
     Inyecta los datos en la plantilla. Sustitución inteligente con Regex.
     """
@@ -352,11 +436,11 @@ async def generate_contract(request: GenerateRequest):
 
 
 @app.post("/api/export-docx")
-async def export_docx(request: GenerateRequest):
+def export_docx(request: GenerateRequest):
     """
     Genera el contrato como .DOCX profesional.
     """
-    gen_response = await generate_contract(request)
+    gen_response = generate_contract(request)
     contract_text = gen_response.contract_preview
 
     doc = Document()
