@@ -188,10 +188,22 @@ async function handleAnalyze() {
     }
 
     const data = await res.json();
-    state.variables = data.variables;
+
+    // ── LOG DE DIAGNÓSTICO ──────────────────────────────────────
+    console.log('[ANALYZE] Respuesta completa del backend:', data);
+    console.log('[ANALYZE] Variables detectadas:', data.variables ? data.variables.length : 0);
+    if (data.variables) {
+      data.variables.forEach((v, i) =>
+        console.log(`[ANALYZE]   [${i}] key=${v.key} | label=${v.label} | type=${v.type} | placeholder=${v.placeholder_text}`)
+      );
+    }
+    // ────────────────────────────────────────────────────────────
+
+    state.variables = data.variables || [];
+    state.collectedData = {};
 
     hideLoading();
-    renderVariables(data.variables, data.analysis_notes);
+    renderVariables(state.variables, data.analysis_notes);
     goToStep(2);
 
   } catch (err) {
@@ -200,7 +212,7 @@ async function handleAnalyze() {
   }
 }
 
-// Función para renderizar la lista de variables en el Paso 2
+// Función para renderizar la lista de variables en el Paso 2 (con inputs editables)
 function renderVariables(variables, notes) {
   const list = $('variables-list');
   const notesEl = $('analysis-notes');
@@ -218,30 +230,42 @@ function renderVariables(variables, notes) {
     list.innerHTML = `
       <div style="text-align:center;padding:2rem;color:var(--text-muted)">
         <p>⚠️ No se detectaron variables en el contrato.</p>
-        <p style="font-size:0.8rem;margin-top:0.5rem">Intente marcar los campos con [CORCHETES] si la IA no los reconoce automáticamente.</p>
+        <p style="font-size:0.8rem;margin-top:0.5rem">Intente marcar los campos con [CORCHETES] o usar puntos suspensivos (......) si la IA no los reconoció automáticamente.</p>
       </div>`;
     $('btn-confirm-vars').disabled = true;
+    console.log('[RENDER] Sin variables — mostrando mensaje de alerta.');
     return;
   }
 
   $('btn-confirm-vars').disabled = false;
+  console.log(`[RENDER] Renderizando ${variables.length} input(s) en el formulario.`);
 
   variables.forEach((v, i) => {
+    const currentVal = state.collectedData[v.key] || '';
     const card = document.createElement('div');
     card.className = 'variable-card';
     card.style.animationDelay = `${i * 50}ms`;
 
-    // Contenido de la tarjeta
     card.innerHTML = `
       <div class="var-type-container">
         <span class="var-type-badge var-type-${v.type || 'texto'}">${v.type || 'texto'}</span>
       </div>
-      <div class="var-info">
-        <div class="var-label">${v.label || 'Campo'}</div>
-        <div class="var-placeholder">${escapeHtml(v.placeholder_text || '')}</div>
-        ${v.description ? `<div class="var-desc">${escapeHtml(v.description)}</div>` : ''}
+      <div class="var-info" style="flex:1">
+        <div class="var-label">${escapeHtml(v.label || 'Campo')}</div>
+        <div class="var-placeholder" style="font-size:0.75rem;margin-bottom:0.4rem">${escapeHtml(v.placeholder_text || '')}</div>
+        <input
+          type="text"
+          class="var-input"
+          id="var-input-${escapeHtml(v.key)}"
+          data-key="${escapeHtml(v.key)}"
+          placeholder="Ingrese ${escapeHtml(v.label || v.key)}..."
+          value="${escapeHtml(currentVal)}"
+          autocomplete="off"
+          style="width:100%;padding:0.45rem 0.7rem;border:1px solid var(--border);border-radius:6px;background:var(--bg-input, #1e1e2e);color:var(--text-primary);font-size:0.9rem;outline:none;transition:border-color .2s"
+        />
+        ${v.description ? `<div class="var-desc" style="margin-top:0.3rem">${escapeHtml(v.description)}</div>` : ''}
       </div>
-      <button class="btn-remove-var" onclick="handleRemoveVar(${i})" title="Quitar este campo (fijo)">
+      <button class="btn-remove-var" onclick="handleRemoveVar(${i})" title="Quitar este campo">
         <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
           <polyline points="3 6 5 6 21 6"></polyline>
           <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path>
@@ -250,10 +274,37 @@ function renderVariables(variables, notes) {
         </svg>
       </button>
     `;
+
+    // Actualizar state.collectedData en tiempo real al escribir
+    const input = card.querySelector('.var-input');
+    input.addEventListener('input', () => {
+      state.collectedData[v.key] = input.value.trim();
+    });
+    // Focus highlight
+    input.addEventListener('focus', () => input.style.borderColor = 'var(--primary, #6366f1)');
+    input.addEventListener('blur', () => input.style.borderColor = '');
+
     list.appendChild(card);
+
+    // Forzar visibilidad: aplica el delay correcto y asegura opacity=1
+    // en caso de que la animación CSS no se dispare por caché o timing
+    card.style.animationDelay = `${i * 60}ms`;
+    // Fallback: si después del delay la opacidad sigue en 0, la forzamos
+    setTimeout(() => { card.style.opacity = '1'; }, (i * 60) + 400);
   });
 
   updateProgressStats(variables.length, 0);
+}
+
+// Lee todos los inputs del formulario Paso 2 y sincroniza state.collectedData
+function readFormValues() {
+  const inputs = document.querySelectorAll('#variables-list .var-input');
+  inputs.forEach(input => {
+    const key = input.dataset.key;
+    const val = input.value.trim();
+    if (key) state.collectedData[key] = val;
+  });
+  console.log('[FORM] Valores leídos del formulario:', { ...state.collectedData });
 }
 
 // Función para manejar el borrado de una variable
@@ -263,12 +314,31 @@ window.handleRemoveVar = function (index) {
   showToast('Campo marcado como fijo (no se preguntará)', 'info');
 };
 
-// ─── Paso 2 → 3: Confirmar y comenzar entrevista ──────────────────────────────
+// ─── Paso 2 → 3/4: Confirmar variables ───────────────────────────────────────
 async function handleConfirmVariables() {
   if (state.variables.length === 0) return;
 
-  goToStep(3);
-  await startInterview();
+  // Capturar lo ingresado en el formulario antes de avanzar
+  readFormValues();
+
+  const pending = state.variables.filter(v =>
+    !state.collectedData[v.key] || state.collectedData[v.key].toString().trim() === ''
+  );
+
+  console.log(`[CONFIRM] Variables totales: ${state.variables.length} | Pendientes: ${pending.length}`);
+
+  if (pending.length === 0) {
+    // Todas completas → generar directamente sin entrevista
+    console.log('[CONFIRM] Todo completo → generando contrato directo.');
+    updateProgressStats(state.variables.length, state.variables.length);
+    updateCompletedVarsSidebar();
+    await handleGenerateContract();
+  } else {
+    // Quedan variables → iniciar entrevista para las incompletas
+    console.log('[CONFIRM] Quedan pendientes → iniciando entrevista conversacional.');
+    goToStep(3);
+    await startInterview();
+  }
 }
 
 async function startInterview() {

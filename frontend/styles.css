@@ -691,14 +691,31 @@ body {
 .variable-card {
   display: flex;
   gap: 0.75rem;
-  align-items: center;
+  align-items: flex-start;
   background: var(--bg-card);
   border: 1px solid var(--border);
   border-radius: var(--radius-md);
   padding: 0.75rem 1rem;
   transition: all var(--transition);
-  animation: slideIn 0.2s ease forwards;
+  animation: slideIn 0.25s ease forwards;
   opacity: 0;
+}
+
+@keyframes slideIn {
+  from {
+    opacity: 0;
+    transform: translateY(6px);
+  }
+
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.variable-card:hover {
+  border-color: var(--border-light);
+  background: var(--bg-card-hover);
 }
 
 .btn-remove-var {
@@ -770,7 +787,7 @@ body {
   color: #c4b5fd;
 }
 
-.var-info {}
+
 
 .var-label {
   font-size: 0.88rem;
@@ -797,6 +814,36 @@ body {
   color: var(--success);
   font-size: 0.7rem;
   flex-shrink: 0;
+}
+
+/* Input editable por variable (Paso 2) */
+.var-input {
+  width: 100%;
+  padding: 0.45rem 0.75rem;
+  margin-top: 0.4rem;
+  background: var(--bg-input);
+  border: 1.5px solid var(--border);
+  border-radius: var(--radius-sm);
+  color: var(--text-primary);
+  font-family: var(--font-body);
+  font-size: 0.88rem;
+  outline: none;
+  transition: border-color var(--transition), box-shadow var(--transition);
+}
+
+.var-input:focus {
+  border-color: var(--border-focus);
+  box-shadow: 0 0 0 3px rgba(99, 102, 241, 0.12);
+}
+
+.var-input::placeholder {
+  color: var(--text-muted);
+  font-style: italic;
+}
+
+/* Alinear tarjeta verticalmente cuando hay input */
+.variable-card {
+  align-items: flex-start;
 }
 
 /* ════════════════════════════════════════════
