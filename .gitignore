@@ -1,8 +1,14 @@
+venv/
+backend/venv/
+v2/backend/venv/
+node_modules/
+__pycache__/
+*.pyc
+.pytest_cache/
+.DS_Store
+
+# Secrets
 .env
 **/.env
 .env.*
 !.env.example
-venv/
-backend/venv/
-__pycache__/
-*.pyc

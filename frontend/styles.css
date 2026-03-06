@@ -655,6 +655,171 @@ body {
   justify-content: flex-end;
 }
 
+/* Split: volver izquierda, generar+asistente derecha */
+.step-actions-split {
+  justify-content: space-between;
+  align-items: center;
+}
+
+.split-right {
+  display: flex;
+  gap: 0.75rem;
+  align-items: center;
+}
+
+/* Botón "Asistente →" */
+.btn-assistant {
+  font-size: 0.82rem;
+  padding: 0.6rem 1rem;
+  opacity: 0.75;
+  transition: opacity var(--transition), background var(--transition);
+}
+
+.btn-assistant:hover {
+  opacity: 1;
+}
+
+.btn-assistant:disabled {
+  opacity: 0.3;
+  cursor: not-allowed;
+}
+
+/* ── Botón Agregar variable manual ── */
+.btn-add-manual {
+  display: flex;
+  align-items: center;
+  gap: 0.45rem;
+  margin-top: 0.75rem;
+  padding: 0.5rem 1rem;
+  background: transparent;
+  border: 1.5px dashed var(--border-light);
+  border-radius: var(--radius-md);
+  color: var(--text-muted);
+  font-size: 0.82rem;
+  font-weight: 500;
+  cursor: pointer;
+  width: 100%;
+  transition: all var(--transition);
+}
+
+.btn-add-manual span {
+  font-size: 1.1rem;
+  color: var(--primary-light);
+}
+
+.btn-add-manual:hover {
+  border-color: var(--primary);
+  color: var(--primary-light);
+  background: rgba(99, 102, 241, 0.05);
+}
+
+/* ── Formulario inline de variable manual ── */
+.manual-var-form {
+  margin-top: 0.6rem;
+  background: rgba(99, 102, 241, 0.06);
+  border: 1.5px dashed var(--primary);
+  border-radius: var(--radius-md);
+  padding: 1rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.6rem;
+  animation: fadeIn 0.2s ease;
+}
+
+.manual-var-form .form-row {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 0.6rem;
+}
+
+.manual-var-form .form-field {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+}
+
+.manual-var-form .form-field label {
+  font-size: 0.72rem;
+  font-weight: 600;
+  color: var(--text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+.manual-var-form input[type="text"],
+.manual-var-form input[type="checkbox"] {
+  background: var(--bg-input);
+  border: 1.5px solid var(--border);
+  border-radius: var(--radius-sm);
+  color: var(--text-primary);
+  font-size: 0.85rem;
+  padding: 0.4rem 0.65rem;
+  outline: none;
+  transition: border-color var(--transition);
+}
+
+.manual-var-form input[type="text"]:focus {
+  border-color: var(--border-focus);
+}
+
+.manual-var-form .form-check {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  font-size: 0.82rem;
+  color: var(--text-secondary);
+}
+
+.manual-var-form .form-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 0.5rem;
+  margin-top: 0.25rem;
+}
+
+.btn-save-manual {
+  padding: 0.4rem 1rem;
+  background: linear-gradient(135deg, var(--primary), var(--secondary));
+  color: white;
+  border: none;
+  border-radius: var(--radius-sm);
+  font-size: 0.82rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: opacity var(--transition);
+}
+
+.btn-save-manual:hover {
+  opacity: 0.85;
+}
+
+.btn-cancel-manual {
+  padding: 0.4rem 0.8rem;
+  background: transparent;
+  color: var(--text-muted);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  font-size: 0.82rem;
+  cursor: pointer;
+}
+
+/* ── Badge "Manual" en las tarjetas ── */
+.manual-badge {
+  display: inline-flex;
+  align-items: center;
+  padding: 0.15rem 0.5rem;
+  background: rgba(251, 191, 36, 0.15);
+  border: 1px solid rgba(251, 191, 36, 0.35);
+  color: var(--warning);
+  font-size: 0.6rem;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  border-radius: 99px;
+  margin-left: 0.4rem;
+  vertical-align: middle;
+}
+
 /* ── Variables List ── */
 .analysis-note {
   background: rgba(6, 182, 212, 0.08);

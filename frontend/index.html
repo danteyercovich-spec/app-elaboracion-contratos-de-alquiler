@@ -12,7 +12,7 @@
   <link
     href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Playfair+Display:wght@600;700&display=swap"
     rel="stylesheet" />
-  <link rel="stylesheet" href="/static/styles.css?v=2" />
+  <link rel="stylesheet" href="/static/styles.css?v=3" />
 </head>
 
 <body>
@@ -159,12 +159,21 @@
             <!-- Se llena dinámicamente -->
           </div>
 
-          <div class="step-actions">
+          <button id="btn-add-manual" class="btn-add-manual">
+            <span>+</span> Agregar variable manual
+          </button>
+
+          <div class="step-actions step-actions-split">
             <button id="btn-back-1" class="btn-secondary">← Volver</button>
-            <button id="btn-confirm-vars" class="btn-primary">
-              Confirmar y Continuar
-              <span class="btn-arrow">→</span>
-            </button>
+            <div class="split-right">
+              <button id="btn-use-assistant" class="btn-secondary btn-assistant">
+                Asistente →
+              </button>
+              <button id="btn-generate-direct" class="btn-primary">
+                <span class="btn-icon-left">📄</span>
+                Generar documento
+              </button>
+            </div>
           </div>
         </div>
 
@@ -356,7 +365,7 @@
     </div>
   </div>
 
-  <script src="/static/app.js?v=7"></script>
+  <script src="/static/app.js?v=8"></script>
 </body>
 
 </html>

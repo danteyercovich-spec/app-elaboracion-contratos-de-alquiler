@@ -9,12 +9,14 @@ const API_BASE = '';
 // ─── Estado Global ───────────────────────────────────────────────────────────
 const state = {
   contractTemplate: '',
-  variables: [],
+  variables: [],           // variables automáticas (IA)
+  manualVariables: [],     // variables agregadas manualmente
   collectedData: {},
   chatHistory: [],
   currentStep: 1,
   isTyping: false,
   allVariablesComplete: false,
+  analysisCache: {},       // hash de texto → resultado del análisis
 };
 
 // Función global: habilita/deshabilita el botón Analizar según el contenido
@@ -124,7 +126,7 @@ function readFile(file, zone, textarea) {
     textarea.value = text;
     updateCharCount(text.length);
     zone.classList.add('has-file');
-    zone.querySelector('.upload-text').textContent = `✓ ${file.name} cargado`;
+    zone.querySelector('.upload-text').textContent = `✔ ${file.name} cargado`;
     zone.querySelector('.upload-sub').textContent = `${text.length.toLocaleString()} caracteres`;
     $('btn-analyze').disabled = text.trim().length < 50;
     showToast(`Archivo "${file.name}" cargado correctamente`, 'success');
@@ -145,8 +147,6 @@ function initTextarea() {
   textarea.addEventListener('input', checkContent);
   textarea.addEventListener('keyup', checkContent);
 
-  // Al pegar con Ctrl+V el texto llega después del evento paste,
-  // por eso esperamos un tick antes de verificar el contenido
   textarea.addEventListener('paste', () => {
     setTimeout(checkContent, 50);
   });
@@ -160,19 +160,43 @@ function updateCharCount(n) {
 function initButtons() {
   $('btn-analyze').addEventListener('click', handleAnalyze);
   $('btn-back-1').addEventListener('click', () => goToStep(1));
-  $('btn-confirm-vars').addEventListener('click', handleConfirmVariables);
+  $('btn-generate-direct').addEventListener('click', handleGenerateDirect);
+  $('btn-use-assistant').addEventListener('click', handleUseAssistant);
+  $('btn-add-manual').addEventListener('click', showManualVarForm);
   $('btn-download-docx').addEventListener('click', handleDownloadDocx);
   $('btn-copy-text').addEventListener('click', handleCopyText);
   $('btn-new-contract').addEventListener('click', handleNewContract);
   $('btn-reset').addEventListener('click', handleReset);
 }
 
-// ─── Paso 1 → 2: Analizar contrato ───────────────────────────────────────────
+// ─── Paso 1 → 2: Analizar contrato (con caché) ───────────────────────────────
+
+function simpleHash(str) {
+  let h = 0;
+  for (let i = 0; i < str.length; i++) h = (h * 31 + str.charCodeAt(i)) >>> 0;
+  return String(h);
+}
+
 async function handleAnalyze() {
   const text = $('contract-input').value.trim();
   if (!text || text.length < 50) return;
 
   state.contractTemplate = text;
+  const hash = simpleHash(text);
+
+  // ── CACHÉ ────────────────────────────────────────────────────────────────
+  if (state.analysisCache[hash]) {
+    console.log('[API] Cache HIT — sin llamada a Claude. Reutilizando resultado.');
+    const cached = state.analysisCache[hash];
+    state.variables = cached.variables;
+    state.manualVariables = [];
+    state.collectedData = {};
+    renderVariables(state.variables, cached.analysis_notes);
+    goToStep(2);
+    return;
+  }
+
+  console.log('[API] Cache MISS — llamando a Claude para analizar contrato.');
   showLoading('Analizando el contrato con IA...');
 
   try {
@@ -188,8 +212,9 @@ async function handleAnalyze() {
     }
 
     const data = await res.json();
+    state.analysisCache[hash] = data;   // guardar en caché
 
-    // ── LOG DE DIAGNÓSTICO ──────────────────────────────────────
+    // ── LOG DE DIAGNÓSTICO ────────────────────────────────────────────────
     console.log('[ANALYZE] Respuesta completa del backend:', data);
     console.log('[ANALYZE] Variables detectadas:', data.variables ? data.variables.length : 0);
     if (data.variables) {
@@ -197,9 +222,10 @@ async function handleAnalyze() {
         console.log(`[ANALYZE]   [${i}] key=${v.key} | label=${v.label} | type=${v.type} | placeholder=${v.placeholder_text}`)
       );
     }
-    // ────────────────────────────────────────────────────────────
+    // ──────────────────────────────────────────────────────────────────────
 
     state.variables = data.variables || [];
+    state.manualVariables = [];
     state.collectedData = {};
 
     hideLoading();
@@ -212,7 +238,7 @@ async function handleAnalyze() {
   }
 }
 
-// Función para renderizar la lista de variables en el Paso 2 (con inputs editables)
+// ─── Renderizar variables (auto + manual) ─────────────────────────────────────
 function renderVariables(variables, notes) {
   const list = $('variables-list');
   const notesEl = $('analysis-notes');
@@ -225,30 +251,34 @@ function renderVariables(variables, notes) {
   }
 
   list.innerHTML = '';
+  const allVars = [...variables, ...state.manualVariables];
 
-  if (!variables || variables.length === 0) {
+  console.log(`[VARS] Automáticas: ${variables.length} | Manuales: ${state.manualVariables.length} | Total: ${allVars.length}`);
+
+  if (allVars.length === 0) {
     list.innerHTML = `
       <div style="text-align:center;padding:2rem;color:var(--text-muted)">
         <p>⚠️ No se detectaron variables en el contrato.</p>
         <p style="font-size:0.8rem;margin-top:0.5rem">Intente marcar los campos con [CORCHETES] o usar puntos suspensivos (......) si la IA no los reconoció automáticamente.</p>
       </div>`;
-    $('btn-confirm-vars').disabled = true;
-    console.log('[RENDER] Sin variables — mostrando mensaje de alerta.');
+    $('btn-generate-direct').disabled = true;
+    $('btn-use-assistant').disabled = true;
     return;
   }
 
-  $('btn-confirm-vars').disabled = false;
-  console.log(`[RENDER] Renderizando ${variables.length} input(s) en el formulario.`);
+  $('btn-generate-direct').disabled = false;
 
-  variables.forEach((v, i) => {
+  allVars.forEach((v, i) => {
     const currentVal = state.collectedData[v.key] || '';
+    const isManual = !!v.manual;
     const card = document.createElement('div');
     card.className = 'variable-card';
-    card.style.animationDelay = `${i * 50}ms`;
+    card.dataset.varIndex = i;
 
     card.innerHTML = `
       <div class="var-type-container">
         <span class="var-type-badge var-type-${v.type || 'texto'}">${v.type || 'texto'}</span>
+        ${isManual ? '<span class="manual-badge">manual</span>' : ''}
       </div>
       <div class="var-info" style="flex:1">
         <div class="var-label">${escapeHtml(v.label || 'Campo')}</div>
@@ -261,11 +291,11 @@ function renderVariables(variables, notes) {
           placeholder="Ingrese ${escapeHtml(v.label || v.key)}..."
           value="${escapeHtml(currentVal)}"
           autocomplete="off"
-          style="width:100%;padding:0.45rem 0.7rem;border:1px solid var(--border);border-radius:6px;background:var(--bg-input, #1e1e2e);color:var(--text-primary);font-size:0.9rem;outline:none;transition:border-color .2s"
         />
         ${v.description ? `<div class="var-desc" style="margin-top:0.3rem">${escapeHtml(v.description)}</div>` : ''}
+        ${isManual && v.nota ? `<div class="var-desc" style="margin-top:0.3rem">Nota: ${escapeHtml(v.nota)}</div>` : ''}
       </div>
-      <button class="btn-remove-var" onclick="handleRemoveVar(${i})" title="Quitar este campo">
+      <button class="btn-remove-var" data-remove-idx="${i}" title="Quitar este campo">
         <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
           <polyline points="3 6 5 6 21 6"></polyline>
           <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path>
@@ -275,90 +305,195 @@ function renderVariables(variables, notes) {
       </button>
     `;
 
-    // Actualizar state.collectedData en tiempo real al escribir
     const input = card.querySelector('.var-input');
     input.addEventListener('input', () => {
       state.collectedData[v.key] = input.value.trim();
+      updateAssistantBtnState();
     });
-    // Focus highlight
     input.addEventListener('focus', () => input.style.borderColor = 'var(--primary, #6366f1)');
     input.addEventListener('blur', () => input.style.borderColor = '');
+    card.querySelector('[data-remove-idx]').addEventListener('click', () => handleRemoveVar(i));
 
     list.appendChild(card);
-
-    // Forzar visibilidad: aplica el delay correcto y asegura opacity=1
-    // en caso de que la animación CSS no se dispare por caché o timing
-    card.style.animationDelay = `${i * 60}ms`;
-    // Fallback: si después del delay la opacidad sigue en 0, la forzamos
-    setTimeout(() => { card.style.opacity = '1'; }, (i * 60) + 400);
+    card.style.animationDelay = `${i * 50}ms`;
+    setTimeout(() => { card.style.opacity = '1'; }, (i * 50) + 350);
   });
 
-  updateProgressStats(variables.length, 0);
+  updateProgressStats(allVars.length, 0);
+  updateAssistantBtnState();
 }
 
-// Lee todos los inputs del formulario Paso 2 y sincroniza state.collectedData
+function updateAssistantBtnState() {
+  const btn = $('btn-use-assistant');
+  if (!btn) return;
+  const allVars = [...state.variables, ...state.manualVariables];
+  const hasPending = allVars.some(v => !state.collectedData[v.key] || state.collectedData[v.key].toString().trim() === '');
+  btn.disabled = !hasPending;
+}
+
+// ─── Leer valores del formulario ──────────────────────────────────────────────
 function readFormValues() {
-  const inputs = document.querySelectorAll('#variables-list .var-input');
-  inputs.forEach(input => {
+  document.querySelectorAll('#variables-list .var-input').forEach(input => {
     const key = input.dataset.key;
-    const val = input.value.trim();
-    if (key) state.collectedData[key] = val;
+    if (key) state.collectedData[key] = input.value.trim();
   });
   console.log('[FORM] Valores leídos del formulario:', { ...state.collectedData });
 }
 
-// Función para manejar el borrado de una variable
-window.handleRemoveVar = function (index) {
-  state.variables.splice(index, 1);
+// ─── Eliminar variable ────────────────────────────────────────────────────────
+function handleRemoveVar(index) {
+  const allVars = [...state.variables, ...state.manualVariables];
+  const v = allVars[index];
+  if (!v) return;
+  if (v.manual) {
+    const mIdx = state.manualVariables.findIndex(m => m.key === v.key);
+    if (mIdx !== -1) state.manualVariables.splice(mIdx, 1);
+  } else {
+    const aIdx = state.variables.findIndex(a => a.key === v.key);
+    if (aIdx !== -1) state.variables.splice(aIdx, 1);
+  }
   renderVariables(state.variables, null);
-  showToast('Campo marcado como fijo (no se preguntará)', 'info');
-};
+  showToast('Variable eliminada', 'info');
+}
 
-// ─── Paso 2 → 3/4: Confirmar variables ───────────────────────────────────────
-async function handleConfirmVariables() {
-  if (state.variables.length === 0) return;
+// ─── Formulario de variable manual ───────────────────────────────────────────
+function showManualVarForm() {
+  if (document.getElementById('manual-var-form')) return;
 
-  // Capturar lo ingresado en el formulario antes de avanzar
+  const form = document.createElement('div');
+  form.id = 'manual-var-form';
+  form.className = 'manual-var-form';
+
+  form.innerHTML = `
+    <div style="font-size:0.8rem;font-weight:600;color:var(--primary-light);margin-bottom:0.2rem">➕ Nueva variable manual</div>
+    <div class="form-row">
+      <div class="form-field">
+        <label>Nombre de la variable *</label>
+        <input type="text" id="mf-label" placeholder="Ej: Nombre del garante" />
+      </div>
+      <div class="form-field">
+        <label>Texto exacto a reemplazar *</label>
+        <input type="text" id="mf-placeholder" placeholder="Ej: [Garante]" />
+      </div>
+    </div>
+    <div class="form-row">
+      <div class="form-field">
+        <label>Valor nuevo *</label>
+        <input type="text" id="mf-value" placeholder="Ej: Carlos Pérez" />
+      </div>
+      <div class="form-field">
+        <label>Nota / cláusula (opcional)</label>
+        <input type="text" id="mf-nota" placeholder="Ej: Art. 5º del contrato" />
+      </div>
+    </div>
+    <label class="form-check">
+      <input type="checkbox" id="mf-replace-all" checked />
+      Reemplazar todas las ocurrencias
+    </label>
+    <div class="form-actions">
+      <button class="btn-cancel-manual" id="mf-cancel">Cancelar</button>
+      <button class="btn-save-manual" id="mf-save">✓ Agregar</button>
+    </div>
+  `;
+
+  $('btn-add-manual').insertAdjacentElement('afterend', form);
+  document.getElementById('mf-label').focus();
+
+  document.getElementById('mf-cancel').addEventListener('click', () => form.remove());
+  document.getElementById('mf-save').addEventListener('click', () => {
+    const label = document.getElementById('mf-label').value.trim();
+    const placeholder = document.getElementById('mf-placeholder').value.trim();
+    const value = document.getElementById('mf-value').value.trim();
+    const nota = document.getElementById('mf-nota').value.trim();
+    const replaceAll = document.getElementById('mf-replace-all').checked;
+
+    if (!label || !placeholder || !value) {
+      showToast('Completar nombre, texto a reemplazar y valor nuevo', 'error');
+      return;
+    }
+
+    const key = `manual_${label.toLowerCase().replace(/\s+/g, '_')}_${Date.now()}`;
+    state.manualVariables.push({
+      key, label, placeholder_text: placeholder, type: 'texto',
+      manual: true, replace_all: replaceAll, nota,
+    });
+    state.collectedData[key] = value;
+
+    console.log(`[VARS] Variable manual agregada: '${label}' | placeholder: '${placeholder}' | replace_all: ${replaceAll}`);
+
+    form.remove();
+    renderVariables(state.variables, null);
+    showToast(`Variable manual "${label}" agregada`, 'success');
+  });
+}
+
+// ─── Paso 2 → Generar directo (sin asistente) ────────────────────────────────
+async function handleGenerateDirect() {
+  const allVars = [...state.variables, ...state.manualVariables];
   readFormValues();
 
-  const pending = state.variables.filter(v =>
+  const filled = allVars.filter(v => state.collectedData[v.key]?.toString().trim()).length;
+  console.log(`[CONFIRM] Generando directo | Auto: ${state.variables.length} | Manual: ${state.manualVariables.length} | Completadas: ${filled}/${allVars.length}`);
+
+  updateProgressStats(allVars.length, filled);
+  await handleGenerateContract();
+}
+
+// ─── Paso 2 → Asistente (solo variables pendientes) ─────────────────────────
+async function handleUseAssistant() {
+  readFormValues();
+  const allVars = [...state.variables, ...state.manualVariables];
+  const pending = allVars.filter(v =>
     !state.collectedData[v.key] || state.collectedData[v.key].toString().trim() === ''
   );
 
-  console.log(`[CONFIRM] Variables totales: ${state.variables.length} | Pendientes: ${pending.length}`);
+  console.log(`[CONFIRM] Asistente opt-in | Total: ${allVars.length} | Pendientes: ${pending.length}`);
 
   if (pending.length === 0) {
-    // Todas completas → generar directamente sin entrevista
-    console.log('[CONFIRM] Todo completo → generando contrato directo.');
-    updateProgressStats(state.variables.length, state.variables.length);
-    updateCompletedVarsSidebar();
-    await handleGenerateContract();
-  } else {
-    // Quedan variables → iniciar entrevista para las incompletas
-    console.log('[CONFIRM] Quedan pendientes → iniciando entrevista conversacional.');
-    goToStep(3);
-    await startInterview();
+    showToast('No hay variables pendientes. Use "Generar documento" directamente.', 'info');
+    return;
   }
+
+  goToStep(3);
+  await startInterview(pending);
 }
 
-async function startInterview() {
+// ─── Entrevista (solo con vars pendientes) ────────────────────────────────────
+async function startInterview(pendingVars) {
   const messagesEl = $('chat-messages');
   messagesEl.innerHTML = '';
   state.chatHistory = [];
-  state.collectedData = {};
 
-  // Mensaje de bienvenida del bot
-  const welcome = `¡Bienvenido! Soy su asistente legal. En los próximos minutos le haré una serie de preguntas para completar su contrato de alquiler.
+  const varsForChat = pendingVars || state.variables;
 
-He identificado **${state.variables.length} campo(s)** que necesita completar. Responda con precisión, ya que cada dato será insertado exactamente en el documento legal.
-
-Comencemos.`;
+  const welcome = `¡Hola! Solo necesito completar **${varsForChat.length} campo(s)** que quedaron sin valor. Los que ya completaste en el formulario no se volverán a pedir.\n\nComencemos.`;
 
   addBotMessage(welcome);
   state.chatHistory.push({ role: 'assistant', content: welcome });
 
-  // Primera pregunta
-  await sendToBotApi();
+  try {
+    const res = await fetch(`${API_BASE}/api/chat`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        messages: state.chatHistory,
+        variables: varsForChat,
+        collected_data: state.collectedData,
+      }),
+    });
+    if (res.ok) {
+      const data = await res.json();
+      removeTypingIndicator();
+      addBotMessage(data.reply);
+      state.chatHistory.push({ role: 'assistant', content: data.reply });
+      state.collectedData = { ...state.collectedData, ...data.collected_data };
+      setInputEnabled(true);
+      $('chat-input').focus();
+    }
+  } catch (err) {
+    addBotMessage(`Lo siento, hubo un error: ${err.message}`);
+    setInputEnabled(true);
+  }
 }
 
 // ─── Chat ─────────────────────────────────────────────────────────────────────
@@ -415,11 +550,12 @@ async function sendToBotApi() {
 
     addBotMessage(data.reply);
     state.chatHistory.push({ role: 'assistant', content: data.reply });
-    state.collectedData = data.collected_data;
+    state.collectedData = { ...state.collectedData, ...data.collected_data };
 
     // Actualizar progreso
+    const allVars = [...state.variables, ...state.manualVariables];
     const done = Object.keys(state.collectedData).filter(k => state.collectedData[k]).length;
-    updateProgressStats(state.variables.length, done);
+    updateProgressStats(allVars.length, done);
     updateCompletedVarsSidebar();
 
     if (data.is_complete) {
@@ -465,7 +601,6 @@ function addUserMessage(text) {
 }
 
 function formatMessage(text) {
-  // Convertir **bold** y saltos de línea
   return escapeHtml(text)
     .replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>')
     .replace(/\n/g, '<br>');
@@ -512,13 +647,15 @@ function setInputEnabled(enabled) {
 async function handleGenerateContract() {
   showLoading('Generando el contrato final...');
 
+  const allVars = [...state.variables, ...state.manualVariables];
+
   try {
     const res = await fetch(`${API_BASE}/api/generate`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
         contract_template: state.contractTemplate,
-        variables: state.variables,
+        variables: allVars,
         collected_data: state.collectedData,
       }),
     });
@@ -531,7 +668,7 @@ async function handleGenerateContract() {
     $('contract-preview').textContent = data.contract_preview;
 
     // Progreso 100%
-    updateProgressStats(state.variables.length, state.variables.length);
+    updateProgressStats(allVars.length, allVars.length);
     goToStep(4);
     showToast(`¡Contrato completado! ${data.variables_applied} variables aplicadas.`, 'success');
 
@@ -547,13 +684,15 @@ async function handleDownloadDocx() {
   btn.disabled = true;
   btn.querySelector('.btn-export-title').textContent = 'Generando...';
 
+  const allVars = [...state.variables, ...state.manualVariables];
+
   try {
     const res = await fetch(`${API_BASE}/api/export-docx`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
         contract_template: state.contractTemplate,
-        variables: state.variables,
+        variables: allVars,
         collected_data: state.collectedData,
       }),
     });
@@ -592,6 +731,7 @@ async function handleCopyText() {
 // ─── Nuevo contrato (misma plantilla) ────────────────────────────────────────
 function handleNewContract() {
   state.collectedData = {};
+  state.manualVariables = [];
   state.chatHistory = [];
   state.allVariablesComplete = false;
   goToStep(2);
@@ -604,6 +744,7 @@ function handleReset() {
 
   state.contractTemplate = '';
   state.variables = [];
+  state.manualVariables = [];
   state.collectedData = {};
   state.chatHistory = [];
   state.allVariablesComplete = false;
@@ -622,9 +763,8 @@ function handleReset() {
   goToStep(1);
 }
 
-// ─── Navegación entre pasos ───────────────────────────────────────────────────
+// ─── Navegación entre pasos ──────────────────────────────────────────────────
 function goToStep(step) {
-  // Ocultar todos los pasos
   for (let i = 1; i <= 4; i++) {
     const el = $(`step-${i}`);
     if (el) {
@@ -638,7 +778,6 @@ function goToStep(step) {
     }
   }
 
-  // Mostrar paso actual
   const current = $(`step-${step}`);
   if (current) {
     current.classList.remove('hidden');
@@ -650,14 +789,13 @@ function goToStep(step) {
 
   state.currentStep = step;
 
-  // Marcar como completados los anteriores
   for (let i = 1; i < step; i++) {
     const nav = $(`step-nav-${i}`);
     if (nav) {
       nav.classList.remove('active');
       nav.classList.add('done');
       const numEl = nav.querySelector('.step-num');
-      if (numEl) numEl.textContent = '✓';
+      if (numEl) numEl.textContent = '✔';
     }
   }
 }
@@ -665,9 +803,9 @@ function goToStep(step) {
 // ─── Progreso ─────────────────────────────────────────────────────────────────
 function updateProgressStats(total, done, reset = false) {
   if (reset) {
-    $('stat-total').textContent = '—';
-    $('stat-done').textContent = '—';
-    $('stat-pending').textContent = '—';
+    $('stat-total').textContent = '-';
+    $('stat-done').textContent = '-';
+    $('stat-pending').textContent = '-';
     $('progress-pct').textContent = '0%';
     setProgressRing(0);
     return;
@@ -690,7 +828,6 @@ function setProgressRing(pct) {
   circle.style.strokeDashoffset = offset;
   circle.style.strokeDasharray = circumference;
 
-  // Color dinámico
   if (pct === 100) {
     circle.style.stroke = '#34d399';
   } else if (pct > 50) {
@@ -714,8 +851,9 @@ function updateCompletedVarsSidebar() {
   card.style.display = 'block';
   list.innerHTML = '';
 
+  const allVarsMeta = [...state.variables, ...state.manualVariables];
   entries.forEach(([key, val], i) => {
-    const varInfo = state.variables.find(v => v.key === key);
+    const varInfo = allVarsMeta.find(v => v.key === key);
     const label = varInfo ? varInfo.label : key;
 
     const div = document.createElement('div');
@@ -747,7 +885,7 @@ function showToast(msg, type = 'info') {
   const icon = $('toast-icon');
   const msgEl = $('toast-msg');
 
-  const icons = { success: '✓', error: '✕', info: 'ℹ' };
+  const icons = { success: '✔', error: '✖', info: 'ℹ' };
   icon.textContent = icons[type] || 'ℹ';
   msgEl.textContent = msg;
 

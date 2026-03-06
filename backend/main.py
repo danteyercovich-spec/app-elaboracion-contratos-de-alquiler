@@ -1,4 +1,4 @@
-"""
+﻿"""
 AutoContract - Backend FastAPI
 Gestor Legal Conversacional para Contratos de Alquiler
 Soporta: OpenAI (gpt-4o-mini) y Anthropic Claude
@@ -393,76 +393,168 @@ Responde con JSON válido:
 def generate_contract(request: GenerateRequest):
     """
     Inyecta los datos en la plantilla. Sustitución en 3 capas para máxima confiabilidad.
+    Soporta replace_all por variable y distingue variables auto vs manuales.
     """
-    contract = request.contract_template
-    applied = 0
-    no_match = []
+    try:
+        contract = request.contract_template
+        applied  = 0
+        no_match = []
+        skipped  = []
 
-    print(f"\n[GENERATE] Variables recibidas: {len(request.variables)}")
-    print(f"[GENERATE] Datos recolectados : {list(request.collected_data.keys())}")
+        raw_vars   = request.variables or []
+        count_auto   = sum(1 for v in raw_vars if not v.get("manual"))
+        count_manual = len(raw_vars) - count_auto
 
-    for variable in request.variables:
-        key         = variable["key"]
-        placeholder = variable.get("placeholder_text", "").strip()
-        value       = str(request.collected_data.get(key, "")).strip()
+        # ── Log de inicio ──────────────────────────────────────────────────────
+        print(f"\n[GENERATE] === INICIO ===")
+        print(f"[GENERATE] Variables recibidas: {len(raw_vars)} "
+              f"(auto: {count_auto}, manuales: {count_manual})")
+        print(f"[GENERATE] Claves collected_data : {list(request.collected_data.keys())}")
+        print(f"[GENERATE] Longitud template     : {len(contract)} chars")
 
-        if not value:
-            print(f"[GENERATE] SKIP  '{key}' — sin valor ingresado")
-            continue
-        if not placeholder:
-            print(f"[GENERATE] SKIP  '{key}' — sin placeholder_text")
-            continue
+        # Muestra estructura de ejemplo (sin datos sensibles)
+        shown_auto = shown_manual = False
+        for v in raw_vars:
+            is_m = bool(v.get("manual"))
+            if not is_m and not shown_auto:
+                print(f"[GENERATE] Ejemplo AUTO  : keys={list(v.keys())} "
+                      f"| placeholder='{str(v.get('placeholder_text',''))[:40]}'")
+                shown_auto = True
+            elif is_m and not shown_manual:
+                print(f"[GENERATE] Ejemplo MANUAL: keys={list(v.keys())} "
+                      f"| placeholder='{str(v.get('placeholder_text','') or v.get('valor_original_detectado',''))[:40]}'")
+                shown_manual = True
+            if shown_auto and shown_manual:
+                break
 
-        original_contract = contract
-        replaced = False
+        # ── Normalización defensiva ────────────────────────────────────────────
+        # Convierte cada variable (cualquier estructura) a un dict canónico:
+        #   key, placeholder, value, replace_all, source_tag
+        # Si faltan campos críticos -> SKIP (no 500).
+        normalized = []
+        for raw in raw_vars:
+            try:
+                key = str(raw.get("key") or "").strip()
+                if not key:
+                    print(f"[GENERATE] SKIP variable sin 'key': {list(raw.keys())}")
+                    skipped.append("<sin-key>")
+                    continue
 
-        # ── CAPA 1: Coincidencia exacta (todas las ocurrencias) ───────────────
-        if placeholder in contract:
-            contract = contract.replace(placeholder, value)
-            replaced = True
+                # placeholder: buscar en varios campos posibles
+                placeholder = (
+                    raw.get("placeholder_text")
+                    or raw.get("valor_original_detectado")
+                    or raw.get("placeholder")
+                    or ""
+                )
+                placeholder = str(placeholder).strip()
 
-        # ── CAPA 2: Normalización de espacios (tabs → espacio, múltiples → uno)
-        if not replaced:
-            ph_norm  = re.sub(r'\s+', ' ', placeholder)
-            ctx_norm = re.sub(r'\s+', ' ', contract)
-            if ph_norm in ctx_norm:
-                contract = re.sub(r'\s+', ' ', contract)
-                contract = contract.replace(ph_norm, value)
+                # valor: primero desde collected_data, luego desde la propia variable
+                value = (
+                    request.collected_data.get(key)
+                    or raw.get("value")
+                    or raw.get("valor_nuevo")
+                    or ""
+                )
+                value = str(value).strip()
+
+                replace_all = bool(raw.get("replace_all", True))
+                is_manual   = bool(raw.get("manual", False))
+
+                normalized.append({
+                    "key":         key,
+                    "placeholder": placeholder,
+                    "value":       value,
+                    "replace_all": replace_all,
+                    "source_tag":  "[Manual]" if is_manual else "[Auto]  ",
+                })
+            except Exception as norm_err:
+                print(f"[GENERATE] ERROR normalizando variable: {norm_err} | raw={raw}")
+                skipped.append(str(raw.get("key", "<desconocido>")))
+                continue
+
+        print(f"[GENERATE] Normalizadas OK: {len(normalized)} | Saltadas: {len(skipped)}")
+        if skipped:
+            print(f"[GENERATE] Saltadas (keys): {skipped}")
+
+        # ── Loop de reemplazo ──────────────────────────────────────────────────
+        for var in normalized:
+            key         = var["key"]
+            placeholder = var["placeholder"]
+            value       = var["value"]
+            replace_all = var["replace_all"]
+            source_tag  = var["source_tag"]
+
+            if not value:
+                print(f"[GENERATE] SKIP  {source_tag} '{key}' -- sin valor")
+                continue
+            if not placeholder:
+                print(f"[GENERATE] SKIP  {source_tag} '{key}' -- sin placeholder_text")
+                skipped.append(key)
+                continue
+
+            replaced = False
+
+            # CAPA 1: coincidencia exacta
+            if placeholder in contract:
+                contract = (contract.replace(placeholder, value)
+                            if replace_all else
+                            contract.replace(placeholder, value, 1))
                 replaced = True
 
-        # ── CAPA 3: Regex flexible (puntos, guiones, espacios variables) ──────
-        if not replaced:
-            try:
-                p_esc  = re.escape(placeholder)
-                # Secuencias de puntos → cualquier cantidad de puntos/guiones/espacios
-                p_flex = re.sub(r'(\\\\.)+', r'[.\\-\\s]+', p_esc)
-                # Guiones bajos flexibles
-                p_flex = re.sub(r'\\_+', r'[_\\s]+', p_flex)
-                # Espacios flexibles
-                p_flex = re.sub(r'\\ ', r'\\s*', p_flex)
-
-                if re.search(p_flex, contract):
-                    contract = re.sub(p_flex, value, contract)   # reemplaza TODAS
+            # CAPA 2: normalización de espacios
+            if not replaced:
+                ph_norm  = re.sub(r'\s+', ' ', placeholder)
+                ctx_norm = re.sub(r'\s+', ' ', contract)
+                if ph_norm in ctx_norm:
+                    contract = re.sub(r'\s+', ' ', contract)
+                    contract = (contract.replace(ph_norm, value)
+                                if replace_all else
+                                contract.replace(ph_norm, value, 1))
                     replaced = True
-            except re.error as e:
-                print(f"[GENERATE] REGEX ERR '{key}': {e}")
 
-        # ── Resultado por variable ────────────────────────────────────────────
-        if replaced:
-            applied += 1
-            print(f"[GENERATE] OK    '{key}' → '{value[:30]}{'...' if len(value)>30 else ''}'")
-        else:
-            no_match.append(key)
-            print(f"[GENERATE] MISS  '{key}' — placeholder no encontrado: '{placeholder[:60]}'")
+            # CAPA 3: regex flexible
+            if not replaced:
+                try:
+                    p_esc  = re.escape(placeholder)
+                    p_flex = re.sub(r'(\\\\.)+', r'[.\\-\\s]+', p_esc)
+                    p_flex = re.sub(r'\\_+',     r'[_\\s]+',    p_flex)
+                    p_flex = re.sub(r'\\ ',      r'\\s*',       p_flex)
+                    if re.search(p_flex, contract):
+                        cnt      = 0 if replace_all else 1
+                        contract = re.sub(p_flex, value, contract, count=cnt)
+                        replaced = True
+                except re.error as regex_err:
+                    print(f"[GENERATE] REGEX ERR {source_tag} '{key}': {regex_err}")
 
-    print(f"\n[GENERATE] Resultado: {applied}/{len(request.variables)} variables aplicadas")
-    if no_match:
-        print(f"[GENERATE] Sin match: {no_match}")
+            if replaced:
+                applied += 1
+                preview = value[:30] + ('...' if len(value) > 30 else '')
+                print(f"[GENERATE] OK    {source_tag} '{key}' -> '{preview}'")
+            else:
+                no_match.append(key)
+                print(f"[GENERATE] MISS  {source_tag} '{key}' -- placeholder: '{placeholder[:60]}'")
 
-    return GenerateResponse(
-        contract_preview=contract,
-        variables_applied=applied
-    )
+        print(f"\n[GENERATE] Resultado: {applied}/{len(normalized)} aplicadas | "
+              f"sin-match: {len(no_match)} | saltadas: {len(skipped)}")
+        if no_match:
+            print(f"[GENERATE] Sin match: {no_match}")
+
+        return GenerateResponse(
+            contract_preview=contract,
+            variables_applied=applied
+        )
+
+    except Exception as e:
+        print(f"\n[GENERATE] *** ERROR EN GENERACIÓN ***")
+        print(f"[GENERATE] Tipo  : {type(e).__name__}")
+        print(f"[GENERATE] Mensaje: {e}")
+        print(f"[GENERATE] Traceback completo:")
+        traceback.print_exc()
+        raise HTTPException(
+            status_code=500,
+            detail={"error": "generate_failed", "detail": str(e)}
+        )
 
 
 

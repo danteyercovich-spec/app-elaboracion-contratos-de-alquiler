@@ -1,0 +1,291 @@
+<!DOCTYPE html>
+<html lang="es">
+
+<head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>AutoContract V2 — Contratos desde plantilla</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap"
+        rel="stylesheet" />
+    <link rel="stylesheet" href="styles.css" />
+</head>
+
+<body>
+
+    <!-- ─── Splash ─────────────────────────────────────────────────────────────── -->
+    <div id="splash" class="splash">
+        <div class="splash-inner">
+            <div class="splash-icon">⚖️</div>
+            <div class="splash-title">AutoContract <span>V2</span></div>
+            <div class="splash-sub">Contratos desde plantilla · Sin IA · Sin magia negra</div>
+            <div class="splash-dots"><span></span><span></span><span></span></div>
+        </div>
+    </div>
+
+    <!-- ─── App ────────────────────────────────────────────────────────────────── -->
+    <div id="app" class="app hidden">
+
+        <!-- Header -->
+        <header class="header">
+            <div class="header-brand">
+                <span class="brand-icon">⚖️</span>
+                <span class="brand-name">AutoContract</span>
+                <span class="brand-tag">V2</span>
+            </div>
+            <nav class="steps-nav">
+                <div class="step-nav-item active" id="step-nav-1">
+                    <span class="step-num">1</span><span class="step-label">Plantilla</span>
+                </div>
+                <div class="step-nav-divider"></div>
+                <div class="step-nav-item" id="step-nav-2">
+                    <span class="step-num">2</span><span class="step-label">Datos</span>
+                </div>
+                <div class="step-nav-divider"></div>
+                <div class="step-nav-item" id="step-nav-3">
+                    <span class="step-num">3</span><span class="step-label">Documento</span>
+                </div>
+            </nav>
+            <div class="header-status">
+                <div class="api-dot" id="api-dot"></div>
+                <span id="api-status-text">Conectando...</span>
+            </div>
+        </header>
+
+        <main class="main-content">
+
+            <!-- ═══ PASO 1: Subir plantilla ═══════════════════════════════════════════ -->
+            <section class="step active" id="step-1">
+                <div class="step-header">
+                    <h1 class="step-title">Subí tu plantilla <code>.docx</code></h1>
+                    <p class="step-desc">La plantilla debe tener placeholders en formato <code>{{NOMBRE_CAMPO}}</code>
+                    </p>
+                </div>
+
+                <div class="upload-zone" id="upload-zone">
+                    <input type="file" id="file-input" accept=".docx" class="hidden" />
+                    <div class="upload-content">
+                        <div class="upload-icon">📄</div>
+                        <div class="upload-text">Arrastrá un archivo <strong>.docx</strong> o hacé clic</div>
+                        <div class="upload-sub" id="upload-sub">Solo archivos Word (.docx)</div>
+                    </div>
+                </div>
+
+                <div class="example-box">
+                    <div class="example-title">Ejemplo de placeholder</div>
+                    <div class="example-code">
+                        En la ciudad de <strong>{{CIUDAD}}</strong>, el locador <strong>{{LOCADOR_NOMBRE}}</strong>
+                        con DNI <strong>{{LOCADOR_DNI}}</strong>...
+                    </div>
+                </div>
+
+                <div class="step-actions">
+                    <button id="btn-extract" class="btn-primary" disabled>
+                        Leer placeholders →
+                    </button>
+                </div>
+            </section>
+
+            <!-- ═══ PASO 2: Formulario ════════════════════════════════════════════════ -->
+            <section class="step hidden" id="step-2">
+                <div class="step-header">
+                    <h1 class="step-title">Completá los datos</h1>
+                    <p class="step-desc" id="step2-desc">— placeholders detectados</p>
+                </div>
+
+                <!-- ── Partes Granulares ── -->
+                <div class="parties-container">
+                    <div class="parties-header" id="parties-toggle">
+                        <div class="parties-header-left">
+                            <span class="parties-icon">👥</span>
+                            <div class="parties-info">
+                                <span class="parties-title">Datos de las Partes (Opcional)</span>
+                                <span class="parties-sub">Completá aquí para autocompletar placeholders de
+                                    comparecientes</span>
+                            </div>
+                        </div>
+                        <span class="parties-chevron">▼</span>
+                    </div>
+
+                    <div class="parties-content hidden" id="parties-content">
+                        <!-- Locador -->
+                        <div class="party-section">
+                            <h3 class="party-section-title">Locador 1</h3>
+                            <div class="party-grid">
+                                <div class="form-group"><label>Tratamiento</label><input type="text"
+                                        id="g-locador-tratamiento" placeholder="El Sr. / La Sra."></div>
+                                <div class="form-group"><label>Apellido</label><input type="text"
+                                        id="g-locador-apellido" placeholder="Pérez"></div>
+                                <div class="form-group"><label>Nombres</label><input type="text" id="g-locador-nombres"
+                                        placeholder="Juan"></div>
+                                <div class="form-group"><label>DNI</label><input type="text" id="g-locador-dni"
+                                        placeholder="12.345.678"></div>
+                                <div class="form-group"><label>CUIT/CUIL (Opt)</label><input type="text"
+                                        id="g-locador-cuit" placeholder="20-12345678-9"></div>
+                                <div class="form-group"><label>Fecha Nacimiento</label><input type="text"
+                                        id="g-locador-nacimiento" placeholder="01/01/1980"></div>
+                                <div class="form-group span-2"><label>Domicilio Legal</label><input type="text"
+                                        id="g-locador-domicilio" placeholder="Calle Falsa 123"></div>
+                                <div class="form-group"><label>Localidad</label><input type="text"
+                                        id="g-locador-localidad" placeholder="CABA"></div>
+                                <div class="form-group"><label>Provincia</label><input type="text"
+                                        id="g-locador-provincia" placeholder="Bs As"></div>
+                                <div class="form-group"><label>CP (Opt)</label><input type="text" id="g-locador-cp"
+                                        placeholder="1234"></div>
+                                <div class="form-group"><label>Email (Opt)</label><input type="email"
+                                        id="g-locador-email" placeholder="juan@peris.com"></div>
+                            </div>
+                        </div>
+
+                        <!-- Locatario 1 -->
+                        <div class="party-section">
+                            <h3 class="party-section-title">Locatario 1</h3>
+                            <div class="party-grid">
+                                <div class="form-group"><label>Tratamiento</label><input type="text"
+                                        id="g-locatario1-tratamiento" placeholder="El Sr. / La Sra."></div>
+                                <div class="form-group"><label>Apellido</label><input type="text"
+                                        id="g-locatario1-apellido" placeholder="García"></div>
+                                <div class="form-group"><label>Nombres</label><input type="text"
+                                        id="g-locatario1-nombres" placeholder="María"></div>
+                                <div class="form-group"><label>DNI</label><input type="text" id="g-locatario1-dni"
+                                        placeholder="12.345.678"></div>
+                                <div class="form-group"><label>CUIT/CUIL (Opt)</label><input type="text"
+                                        id="g-locatario1-cuit" placeholder="27-12345678-9"></div>
+                                <div class="form-group"><label>Fecha Nacimiento</label><input type="text"
+                                        id="g-locatario1-nacimiento" placeholder="01/01/1990"></div>
+                                <div class="form-group span-2"><label>Domicilio Real (Opt)</label><input type="text"
+                                        id="g-locatario1-domicilio-real" placeholder="Av. Siempre Viva 742"></div>
+                                <div class="form-group span-2"><label>Domicilio Legal</label><input type="text"
+                                        id="g-locatario1-domicilio" placeholder="Calle Falsa 123"></div>
+                                <div class="form-group"><label>Localidad</label><input type="text"
+                                        id="g-locatario1-localidad" placeholder="CABA"></div>
+                                <div class="form-group"><label>Provincia</label><input type="text"
+                                        id="g-locatario1-provincia" placeholder="Bs As"></div>
+                                <div class="form-group"><label>CP (Opt)</label><input type="text" id="g-locatario1-cp"
+                                        placeholder="1234"></div>
+                                <div class="form-group"><label>Email (Opt)</label><input type="email"
+                                        id="g-locatario1-email" placeholder="maria@garcia.com"></div>
+                            </div>
+                        </div>
+
+                        <!-- Locatario 2 Toggle -->
+                        <div class="l2-toggle-box">
+                            <label class="toggle-container">
+                                <input type="checkbox" id="toggle-l2">
+                                <span class="toggle-slider"></span>
+                                <span class="toggle-label">¿Tiene segundo locatario?</span>
+                            </label>
+                        </div>
+
+                        <!-- Locatario 2 (Hidden) -->
+                        <div class="party-section hidden" id="section-l2">
+                            <h3 class="party-section-title">Locatario 2</h3>
+                            <div class="party-grid">
+                                <div class="form-group"><label>Tratamiento</label><input type="text"
+                                        id="g-locatario2-tratamiento" placeholder="El Sr. / La Sra."></div>
+                                <div class="form-group"><label>Apellido</label><input type="text"
+                                        id="g-locatario2-apellido" placeholder="García"></div>
+                                <div class="form-group"><label>Nombres</label><input type="text"
+                                        id="g-locatario2-nombres" placeholder="José"></div>
+                                <div class="form-group"><label>DNI</label><input type="text" id="g-locatario2-dni"
+                                        placeholder="12.345.678"></div>
+                                <div class="form-group"><label>CUIT/CUIL (Opt)</label><input type="text"
+                                        id="g-locatario2-cuit" placeholder="20-12345678-9"></div>
+                                <div class="form-group"><label>Fecha Nacimiento</label><input type="text"
+                                        id="g-locatario2-nacimiento" placeholder="01/01/1990"></div>
+                                <div class="form-group span-2"><label>Domicilio Real (Opt)</label><input type="text"
+                                        id="g-locatario2-domicilio-real" placeholder="Av. Siempre Viva 742"></div>
+                                <div class="form-group span-2"><label>Domicilio Legal</label><input type="text"
+                                        id="g-locatario2-domicilio" placeholder="Calle Falsa 123"></div>
+                                <div class="form-group"><label>Localidad</label><input type="text"
+                                        id="g-locatario2-localidad" placeholder="CABA"></div>
+                                <div class="form-group"><label>Provincia</label><input type="text"
+                                        id="g-locatario2-provincia" placeholder="Bs As"></div>
+                                <div class="form-group"><label>CP (Opt)</label><input type="text" id="g-locatario2-cp"
+                                        placeholder="1234"></div>
+                                <div class="form-group"><label>Email (Opt)</label><input type="email"
+                                        id="g-locatario2-email" placeholder="jose@garcia.com"></div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <div id="fields-list" class="fields-list"></div>
+
+                <div class="step-actions">
+                    <button class="btn-secondary" id="btn-back-1">← Volver</button>
+                    <button class="btn-primary" id="btn-generate">
+                        Generar documento
+                    </button>
+                </div>
+            </section>
+
+            <!-- ═══ PASO 3: Resultado ═════════════════════════════════════════════════ -->
+            <section class="step hidden" id="step-3">
+                <div class="step-header">
+                    <h1 class="step-title">¡Documento listo! 🎉</h1>
+                    <p class="step-desc" id="step3-desc">El documento fue generado correctamente.</p>
+                </div>
+
+                <div class="success-card">
+                    <div class="success-icon">✅</div>
+                    <div class="success-info">
+                        <div class="success-title" id="success-filename">contrato_COMPLETADO.docx</div>
+                        <div class="success-sub" id="success-stats">— campos completados</div>
+                    </div>
+                </div>
+
+                <div id="unreplaced-warn" class="warn-box hidden"></div>
+
+                <div class="step-actions step-actions-center">
+                    <button class="btn-secondary" id="btn-back-2">← Editar datos</button>
+                    <button class="btn-primary" id="btn-download">
+                        ⬇ Descargar .docx
+                    </button>
+                    <button class="btn-ghost" id="btn-new">
+                        Nuevo contrato
+                    </button>
+                </div>
+
+                <!-- Fallback Download -->
+                <div id="download-fallback" class="download-fallback hidden">
+                    <p>Si la descarga no comenzó, hacé clic aquí:</p>
+                    <button id="btn-download-fallback" class="btn-primary">
+                        Descargar ahora manually
+                    </button>
+                </div>
+            </section>
+
+        </main>
+    </div>
+
+    <!-- Loading overlay -->
+    <div id="loading-overlay" class="loading-overlay hidden">
+        <div class="loading-box">
+            <div class="loading-spinner"></div>
+            <div class="loading-text" id="loading-text">Procesando...</div>
+        </div>
+    </div>
+
+    <!-- UI Logs Panel -->
+    <div id="ui-logs-container" class="ui-logs-container hidden">
+        <div class="ui-logs-header">
+            <span>Logs de Ejecución</span>
+            <button id="btn-close-logs">×</button>
+        </div>
+        <div id="ui-logs-body" class="ui-logs-body"></div>
+    </div>
+
+    <!-- Status Badge -->
+    <div id="status-badge" class="status-badge hidden"></div>
+
+    <!-- Toast -->
+    <div id="toast" class="toast hidden">
+        <span id="toast-icon"></span>
+        <span id="toast-msg"></span>
+    </div>
+
+    <script src="app.js?v=2"></script>
+</body>
+
+</html>
